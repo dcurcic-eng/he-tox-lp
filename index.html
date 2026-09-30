@@ -1150,7 +1150,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <div class="bookform__submit">
         <button class="btn btn-primary submit-btn" type="submit">Book my appointment</button>
         <label class="bookform__consent" for="consent">
-          <input class="bookform__checkbox" id="consent" name="consent" type="checkbox" required>
+          <input class="bookform__checkbox" id="consent" name="consent" type="checkbox">
           <span>By submitting you agree to be contacted about your appointment. No spam, ever.</span>
         </label>
       </div>
@@ -1433,12 +1433,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         var phoneRe = /^[0-9]{10}$/;
         if (!phoneRe.test(phone)) {
           showError('Please enter a 10-digit US phone number.');
-          setBusy(false);
-          return;
-        }
-
-        if (!checkbox) {
-          showError('Please agree to be contacted about your appointment.');
           setBusy(false);
           return;
         }
