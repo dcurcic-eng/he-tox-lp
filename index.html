@@ -439,7 +439,13 @@ textarea.field{height:9.6rem;padding:1.4rem 1.5rem;resize:vertical;line-height:1
 .field:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 .3rem rgba(230,62,162,.12)}
 .bookform__submit{display:flex;flex-direction:column;align-items:flex-start;gap:1.4rem;padding-top:2.4rem}
 .bookform__submit .btn{padding:1.5rem 2.6rem}
-.bookform__consent{font-size:1.2rem;line-height:1.5;color:var(--ink-50)}
+.bookform__consent{display:flex;align-items:flex-start;gap:1rem;font-size:1.2rem;line-height:1.5;color:var(--ink-50);cursor:pointer}
+.bookform__checkbox{flex:none;width:1.6rem;height:1.6rem;margin:.1rem 0 0;accent-color:var(--pink);cursor:pointer}
+.bookform__checkbox:focus-visible{outline:none;box-shadow:0 0 0 .3rem rgba(230,62,162,.12)}
+.bookform__error{display:none;margin-top:1.4rem;font-size:1.4rem;line-height:1.5;color:#c8235f}
+.form-success-message{display:flex;flex-direction:column;gap:1rem;padding:2.4rem;background:#fff;border:.1rem solid rgba(44,42,43,.20);border-radius:.4rem}
+.form-success-message h3{font-family:var(--serif);font-style:italic;font-weight:400;font-size:2.6rem;line-height:1.15;color:var(--ink)}
+.form-success-message p{font-size:1.5rem;line-height:1.5;color:var(--ink)}
 .mappanel{position:relative;flex:1 1 0;min-width:0;height:64.1rem;background:var(--surf-muted);overflow:hidden}
 .mappanel iframe{position:absolute;inset:0;width:100%;height:100%;filter:saturate(.9)}
 .mapcard{
@@ -1129,22 +1135,26 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <div class="bookform">
     <span class="tag clip-wrap" data-clip-wrap><span>Book your visit</span></span>
     <h2 class="bookform__heading clip-wrap" data-clip-wrap><span>Reserve the $9.99 per unit rate</span></h2>
-    <form class="form" novalidate>
+    <form class="form he-book-form" novalidate>
       <div class="fields">
         <div class="field-row">
-          <input class="field" type="text" name="first" placeholder="First name" autocomplete="given-name">
-          <input class="field" type="text" name="last" placeholder="Last name" autocomplete="family-name">
+          <input class="field" id="first_name" type="text" name="first_name" placeholder="First name" autocomplete="given-name" required>
+          <input class="field" id="last_name" type="text" name="last_name" placeholder="Last name" autocomplete="family-name" required>
         </div>
         <div class="field-row">
-          <input class="field" type="tel" name="phone" placeholder="Phone" autocomplete="tel">
-          <input class="field" type="email" name="email" placeholder="Email" autocomplete="email">
+          <input class="field" id="phone" type="tel" name="phone" placeholder="Phone" autocomplete="tel" inputmode="numeric" required>
+          <input class="field" id="email" type="email" name="email" placeholder="Email" autocomplete="email" required>
         </div>
-        <textarea class="field" name="message" placeholder="Anything you would like Melissa to know (optional)"></textarea>
+        <textarea class="field" id="message" name="message" placeholder="Anything you would like Melissa to know (optional)"></textarea>
       </div>
       <div class="bookform__submit">
-        <button class="btn btn-primary" type="submit">Book my appointment</button>
-        <p class="bookform__consent">By submitting you agree to be contacted about your appointment. No spam, ever.</p>
+        <button class="btn btn-primary submit-btn" type="submit">Book my appointment</button>
+        <label class="bookform__consent" for="consent">
+          <input class="bookform__checkbox" id="consent" name="consent" type="checkbox" required>
+          <span>By submitting you agree to be contacted about your appointment. No spam, ever.</span>
+        </label>
       </div>
+      <div id="form-error" class="bookform__error" role="alert" aria-live="polite"></div>
     </form>
   </div>
 
@@ -1370,23 +1380,130 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
 
   /* -------------------------------------------------------------------
-     Form: no backend on a static page, so give honest feedback
+     Form: submit to AEVA contacts API
      ------------------------------------------------------------------- */
-  var form = document.querySelector(".form");
-  if (form){
-    form.addEventListener("submit", function(e){
-      e.preventDefault();
-      var btn = form.querySelector('button[type="submit"]');
-      if (!btn || btn.disabled) return;
-      var label = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = "Sending…";
-      window.setTimeout(function(){
-        btn.textContent = "✓ Thanks, we'll be in touch";
-        window.setTimeout(function(){ btn.textContent = label; btn.disabled = false; }, 2600);
-      }, 600);
+  (function () {
+    var forms = document.querySelectorAll('.he-book-form');
+
+    forms.forEach(function (form) {
+      var submitBtn = form.querySelector('.submit-btn');
+      var errEl = form.querySelector('#form-error');
+      var defaultLabel = submitBtn ? submitBtn.textContent : '';
+
+      function showError(msg) {
+        if (!errEl) return;
+        errEl.textContent = msg;
+        errEl.style.display = msg ? 'block' : 'none';
+      }
+
+      function setBusy(busy) {
+        if (!submitBtn) return;
+        submitBtn.disabled = busy;
+        submitBtn.textContent = busy ? 'Sending\u2026' : defaultLabel;
+      }
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        showError('');
+        if (submitBtn && submitBtn.disabled) return;
+        setBusy(true);
+
+        var first_name = (form.querySelector('#first_name').value || '').trim();
+        var last_name = (form.querySelector('#last_name').value || '').trim();
+        var email = (form.querySelector('#email').value || '').trim();
+        var phone = (form.querySelector('#phone').value || '').replace(/\D/g, '');
+        var message = (form.querySelector('#message').value || '').trim();
+        var consentEl = form.querySelector('#consent');
+        var checkbox = consentEl && consentEl.checked ? 'on' : '';
+
+        if (!first_name || !last_name) {
+          showError('Please enter your first and last name.');
+          setBusy(false);
+          return;
+        }
+
+        var emailRe = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+        if (!emailRe.test(email)) {
+          showError('Please enter a valid email address.');
+          setBusy(false);
+          return;
+        }
+
+        if (phone.length === 11 && phone.charAt(0) === '1') phone = phone.slice(1);
+        var phoneRe = /^[0-9]{10}$/;
+        if (!phoneRe.test(phone)) {
+          showError('Please enter a 10-digit US phone number.');
+          setBusy(false);
+          return;
+        }
+
+        if (!checkbox) {
+          showError('Please agree to be contacted about your appointment.');
+          setBusy(false);
+          return;
+        }
+
+        var fd = new FormData();
+        fd.append('first_name', first_name);
+        fd.append('last_name', last_name);
+        fd.append('phone', '+1' + phone);
+        fd.append('email', email);
+        fd.append('checkbox', checkbox);
+        fd.append('organization', 'b3df9b93-dcf3-4ad3-86a7-cb50946514ed');
+        fd.append('form', '568');
+        fd.append('message', message);
+        fd.append('form_location', window.location.href);
+
+        // Detect ad tracking params from URL
+        var urlParams = new URLSearchParams(window.location.search);
+        var trackingMap = {
+          gclid: 'google',
+          wbraid: 'google',
+          gbraid: 'google',
+          fbclid: 'meta',
+          ttclid: 'tiktok'
+        };
+        var trackingParam = '';
+        var adSource = 'other';
+        for (var param in trackingMap) {
+          if (!Object.prototype.hasOwnProperty.call(trackingMap, param)) continue;
+          var val = urlParams.get(param);
+          if (val) {
+            trackingParam = val;
+            adSource = trackingMap[param];
+            break;
+          }
+        }
+        fd.append('tracking_param', trackingParam);
+        fd.append('ad_source', adSource);
+
+        try {
+          var res = await fetch(
+            'https://api.aevadigital.com/api/v1/contacts/add_contact_from_form/',
+            { method: 'POST', body: fd }
+          );
+
+          if (!res.ok) {
+            var txt = await res.text().catch(function () { return res.statusText; });
+            throw new Error(txt || 'Server error');
+          }
+
+          window.dataLayer = window.dataLayer || [];
+          window.dataLayer.push({ 'event': 'form-success' });
+
+          form.style.display = 'none';
+          var thankYou = document.createElement('div');
+          thankYou.className = 'form-success-message';
+          thankYou.innerHTML = '<h3>Thank you!</h3><p>Your appointment request has been received. Melissa\'s team will be in touch shortly to confirm your visit.</p>';
+          form.parentNode.insertBefore(thankYou, form.nextSibling);
+        } catch (err) {
+          console.error(err);
+          showError('Submission failed \u2014 please try again.');
+          setBusy(false);
+        }
+      });
     });
-  }
+  })();
 
   /* -------------------------------------------------------------------
      Touch: hover effects become tap effects
